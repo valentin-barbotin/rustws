@@ -1,17 +1,49 @@
 use std::{path::Path, fs::File, io::Read};
+use async_std::task::spawn;
+use futures::StreamExt;
+use futures::executor::block_on;
 use toml;
 use serde::Deserialize;
-use std::io::Error;
-
+use std::io::{Error, Write};
+use std::thread;
+use std::time::Duration;
+use std::net::{TcpListener, TcpStream, Shutdown};
+use async_std::prelude::*;
+use async_std::net::{TcpStream as AsyncTcpStream, TcpListener as AsyncTcpListener, Shutdown as AsyncShutdown};
 #[derive(Deserialize)]
 struct AppConfig {
     host: String,
     password: String,
 }
 
-fn main() {
+async fn handle_client(mut stream: AsyncTcpStream) {
+
+    let mut buffer = [0; 1024];
+
+    // stream.read(&mut buffer).await.unwrap();
+
+    stream.write_all(b"hello\n").await.unwrap();
+
+    thread::sleep(Duration::from_secs(15));
+
+    stream.write_all(b"END\n").await.unwrap();
+    stream.flush().await.unwrap();
+}
+
+#[async_std::main]
+async fn main() {
     let config = read_config_file();
     println!("Host value = {host}\nPassword value = {password}", host = config.host, password = config.password);
+
+    let listener = AsyncTcpListener::bind("127.0.0.1:4000").await.unwrap();
+
+    listener
+    .incoming()
+    .for_each_concurrent(None, 
+    |stream| async move {
+        let stream = stream.unwrap();
+        spawn(handle_client(stream));
+    }).await;
 }
 
 fn read_file(path: &Path) -> Result<String, Error> {
