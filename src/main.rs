@@ -11,11 +11,25 @@ use std::time::Duration;
 use std::net::{TcpListener, TcpStream, Shutdown, IpAddr};
 use async_std::prelude::*;
 use async_std::net::{TcpStream as AsyncTcpStream, TcpListener as AsyncTcpListener, Shutdown as AsyncShutdown};
+use photon_rs::native::{open_image, open_image_from_bytes, save_image, image_to_bytes};
+use photon_rs::transform::{resize, SamplingFilter};
+
 #[derive(Deserialize)]
 struct AppConfig {
     host: IpAddr,
     port: u16,
     password: String,
+}
+
+fn resize_image() {
+    let mut img = open_image("photo.jpg").unwrap();
+
+    let width = 10240;
+    let heigth = 10240;
+    img = resize(&img, width, heigth, SamplingFilter::Nearest);
+
+    save_image(img, "output2.jpg");
+    println!("resize done");
 }
 
 
