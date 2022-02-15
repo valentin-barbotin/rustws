@@ -375,6 +375,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77f3309417938f28bf8228fcff79a4a37103981e3e186d2ccd19c74b38f4eb71"
 
 [[package]]
+name = "fast_image_resize"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2479aea9bfdceba1d18827cbae85c85feb29780ab293717184cf2124998122f4"
+dependencies = [
+ "num-traits",
+ "thiserror",
+]
+
+[[package]]
 name = "fastrand"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1096,7 +1106,10 @@ name = "rustws"
 version = "0.1.0"
 dependencies = [
  "async-std",
+ "fast_image_resize",
  "futures",
+ "image",
+ "imageproc",
  "photon-rs",
  "serde",
  "toml",

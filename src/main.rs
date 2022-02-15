@@ -1,18 +1,25 @@
-use std::fmt::format;
+use std::num::NonZeroU32;
 use std::{path::Path, fs::File, io::Read};
 use async_std::task::spawn;
 use futures::StreamExt;
 use futures::executor::block_on;
+use image::png::PngEncoder;
+use imageproc::rect::Rect;
 use toml;
 use serde::Deserialize;
-use std::io::{Error, Write};
+use std::io::{Error, BufWriter, Write};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::net::{TcpListener, TcpStream, Shutdown, IpAddr};
 use async_std::prelude::*;
 use async_std::net::{TcpStream as AsyncTcpStream, TcpListener as AsyncTcpListener, Shutdown as AsyncShutdown};
 use photon_rs::native::{open_image, open_image_from_bytes, save_image, image_to_bytes};
 use photon_rs::transform::{resize, SamplingFilter};
+use imageproc::drawing::{self, Canvas};
+use imageproc::utils::load_image_or_panic;
+use image::{Rgba, Rgb};
+use image::io::Reader as ImageReader;
+use fast_image_resize as fr;
 
 #[derive(Deserialize)]
 struct AppConfig {
@@ -22,13 +29,47 @@ struct AppConfig {
 }
 
 fn resize_image() {
-    let mut img = open_image("photo.jpg").unwrap();
+    let input = Path::new("pax.png");
+    let output = Path::new("output.png");
+    let w_target = 20480;
+    let h_target = 20480;
 
-    let width = 10240;
-    let heigth = 10240;
-    img = resize(&img, width, heigth, SamplingFilter::Nearest);
+    // Open the image
+    let img = ImageReader::open(input).unwrap().decode().unwrap();
 
-    save_image(img, "output2.jpg");
+    // Must use NonZeroU32 for width and height
+    let width = NonZeroU32::new(img.width()).unwrap();
+    let height = NonZeroU32::new(img.height()).unwrap();
+
+    // Create a new image buffer from the reader
+    let mut src_image = fr::Image::from_vec_u8(width, height, img.to_rgba8().into_raw(), fr::PixelType::U8x4).unwrap();
+
+    let dst_width = NonZeroU32::new(w_target).unwrap();
+    let dst_heigth = NonZeroU32::new(h_target).unwrap();
+
+    // Create a new empty image
+    let mut dst_image = fr::Image::new(dst_width, dst_heigth, src_image.pixel_type());
+
+    let mut dst_view = dst_image.view_mut();
+
+    let mut resizer = fr::Resizer::new(fr::ResizeAlg::Nearest);
+    println!("resizing...");
+    let now = Instant::now();
+    resizer.resize(&src_image.view(), &mut dst_view).unwrap();
+    println!("time = {}", now.elapsed().as_millis());
+
+    let mut img_bytes = Vec::new();
+    PngEncoder::new(&mut img_bytes)
+    .encode(dst_image.buffer(), dst_width.get(), dst_heigth.get(), image::ColorType::Rgba8)
+    .unwrap();
+
+    // let mut file = File::create(output).unwrap();
+
+    let mut stream = File::open("/dev/null").unwrap();
+
+    stream.write_all(&img_bytes).unwrap();
+    // file.write_all(&img_bytes).unwrap();
+
     println!("resize done");
 }
 
@@ -95,6 +136,10 @@ async fn handle_client(mut stream: AsyncTcpStream) {
 /// async_std allows to use async functions from main thread
 #[async_std::main]
 async fn main() {
+
+    resize_image();
+    return;
+
     let config = read_config_file();
     println!("Host value = {host}\nPassword value = {password}", host = config.host, password = config.password);
 
@@ -122,16 +167,16 @@ fn read_file(path: &Path) -> Result<String, Error> {
 fn read_config_file() -> AppConfig {
     let config_file = Path::new("./config/config.toml");
 
-    /// Read the config file
+    // Read the config file
     let config_as_string = read_file(config_file).expect("Could not read config file");
 
-    /// Deserialize the config file content to our AppConfig struct
+    // Deserialize the config file content to our AppConfig struct
     let config: AppConfig = toml::from_str(&config_as_string).unwrap();
 
-    /// Panic if the config file is not valid
+    // Panic if the config file is not valid
     assert!(config.host.is_ipv4(), "Host is not set");
     assert!(config.password.len() > 0, "Password is not set");
 
-    ///return the config struct
+    // return the config struct
     config
 }
